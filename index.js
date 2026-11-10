@@ -2,7 +2,7 @@ require('dotenv').config();
 const { Client, GatewayIntentBits, SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 const { createClient } = require('@supabase/supabase-js');
 
-// Prevenir crash global por erros não tratados
+// Prevenir qualquer crash por erros não tratados
 process.on('unhandledRejection', error => {
     console.error('Erro não tratado detetado:', error);
 });
@@ -21,11 +21,11 @@ const client = new Client({
 });
 
 client.once('ready', async () => {
-    console.log(`Bot ligado como ${client.user.tag}!`);
+    console.log(`Bot ligado com sucesso como ${client.user.tag}!`);
 
     const data = new SlashCommandBuilder()
         .setName('criar-produto')
-        .setDescription('Cria um novo produto para venda (Apenas Admins)')
+        .setDescription('Cria um novo produto para venda')
         .addStringOption(option =>
             option.setName('nome')
                 .setDescription('Nome do produto')
@@ -36,7 +36,7 @@ client.once('ready', async () => {
                 .setRequired(true))
         .addStringOption(option =>
             option.setName('descricao')
-                .setDescription('Descrição detalhada do produto')
+                .setDescription('Descrição do produto')
                 .setRequired(true));
 
     try {
@@ -49,14 +49,7 @@ client.once('ready', async () => {
 
 client.on('interactionCreate', async interaction => {
     try {
-        if (!interaction.isChatInputCommand() && !interaction.isButton()) return;
-
         if (interaction.isChatInputCommand() && interaction.commandName === 'criar-produto') {
-            const isAdmin = interaction.member.permissions.has('Administrator') || interaction.guild.ownerId === interaction.user.id;
-            if (!isAdmin) {
-                return interaction.reply({ content: '❌ Apenas administradores podem usar este comando.', ephemeral: true });
-            }
-
             const nome = interaction.options.getString('nome');
             const preco = interaction.options.getNumber('preco');
             const descricao = interaction.options.getString('descricao');
@@ -85,6 +78,9 @@ client.on('interactionCreate', async interaction => {
             if (customId.startsWith('comprar_')) {
                 const guild = interaction.guild;
                 const user = interaction.user;
+
+                // Responde imediatamente para o Discord não dar erro de timeout
+                await interaction.deferReply({ ephemeral: true });
 
                 const channelName = `pedido-${user.username}`.toLowerCase().replace(/[^a-z0-9-]/g, '');
                 
@@ -119,7 +115,7 @@ client.on('interactionCreate', async interaction => {
                 );
 
                 await ticketChannel.send({
-                    content: `Olá ${user}, obrigado pelo interesse! Por favor, efetue o pagamento e clique no botão abaixo para confirmar.`,
+                    content: `Olá ${user}, obrigado pelo interesse! Efetue o pagamento e clique no botão abaixo para confirmar.`,
                     components: [confirmRow]
                 });
 
@@ -127,7 +123,7 @@ client.on('interactionCreate', async interaction => {
                     { user_id: user.id, channel_id: ticketChannel.id, status: 'pendente' }
                 ]);
 
-                await interaction.reply({ content: `✅ Canal de atendimento criado com sucesso: ${ticketChannel}`, ephemeral: true });
+                await interaction.editReply({ content: `✅ Canal de atendimento criado com sucesso: ${ticketChannel}` });
                 return;
             }
 
@@ -154,7 +150,7 @@ client.on('interactionCreate', async interaction => {
                     if (ch) {
                         if (isConfirm) {
                             await ch.send(`✅ **Pagamento Confirmado!** Obrigado pela compra.`);
-                            await ch.send(`🎁 **O teu produto/conteúdo:** \`COLOCA_O_TEU_LINK_OU_CHAVE_AQUI\``);
+                            await ch.send(`🎁 **O teu produto/conteúdo:** \`COLE_O_TEU_LINK_AQUI\``);
                             
                             await supabase
                                 .from('orders')
@@ -169,9 +165,14 @@ client.on('interactionCreate', async interaction => {
             }
         }
     } catch (error) {
-        console.error('Erro detalhado na interação:', error);
-        if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
-            await interaction.reply({ content: '❌ Ocorreu um erro ao processar esta ação.', ephemeral: true }).catch(() => {});
+        console.error('Erro capturado na interação:', error);
+        if (interaction.isRepliable()) {
+            const payload = { content: '❌ Ocorreu um erro ao processar esta ação.', ephemeral: true };
+            if (interaction.deferred) {
+                await interaction.editReply(payload).catch(() => {});
+            } else if (!interaction.replied) {
+                await interaction.reply(payload).catch(() => {});
+            }
         }
     }
 });
