@@ -307,6 +307,7 @@ client.on('interactionCreate', async interaction => {
               await ch.send(`❌ **Pedido Recusado/Cancelado.**`);
             }
       }
+    }      
    });     
 client.login(process.env.DISCORD_TOKEN);
 // Cole o servidor HTTP aqui no finalzinho:
