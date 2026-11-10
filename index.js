@@ -18,7 +18,6 @@ const client = new Client({
 client.once('ready', async () => {
     console.log(`Bot ligado como ${client.user.tag}!`);
 
-    // Registo do comando /criar-produto
     const data = new SlashCommandBuilder()
         .setName('criar-produto')
         .setDescription('Cria um novo produto para venda (Apenas Admins)')
@@ -46,9 +45,10 @@ client.once('ready', async () => {
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand() && !interaction.isButton()) return;
 
-    // 1. Lógica do Comando /criar-produto
     if (interaction.isChatInputCommand() && interaction.commandName === 'criar-produto') {
-        if (!interaction.member.permissions.has('Administrator')) {
+        // Verificar se é Admin ou o Dono do Servidor
+        const isAdmin = interaction.member.permissions.has('Administrator') || interaction.guild.ownerId === interaction.user.id;
+        if (!isAdmin) {
             return interaction.reply({ content: '❌ Apenas administradores podem usar este comando.', ephemeral: true });
         }
 
@@ -74,7 +74,6 @@ client.on('interactionCreate', async interaction => {
         return;
     }
 
-    // 2. Lógica dos Botões
     if (interaction.isButton()) {
         const customId = interaction.customId;
 
@@ -154,7 +153,6 @@ client.on('interactionCreate', async interaction => {
                 const ch = await interaction.guild.channels.fetch(order.channel_id).catch(() => null);
                 if (ch) {
                     if (isConfirm) {
-                        // Entrega Automática no Canal Privado
                         await ch.send(`✅ **Pagamento Confirmado!** Obrigado pela compra.`);
                         await ch.send(`🎁 **O teu produto/conteúdo:** \`COLOCA_O_TEU_LINK_OU_CHAVE_AQUI\``);
                         
