@@ -2,6 +2,11 @@ require('dotenv').config();
 const { Client, GatewayIntentBits, SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 const { createClient } = require('@supabase/supabase-js');
 
+// Prevenir crash global por erros não tratados
+process.on('unhandledRejection', error => {
+    console.error('Erro não tratado detetado:', error);
+});
+
 // Configuração do Supabase
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_KEY;
@@ -43,47 +48,46 @@ client.once('ready', async () => {
 });
 
 client.on('interactionCreate', async interaction => {
-    if (!interaction.isChatInputCommand() && !interaction.isButton()) return;
+    try {
+        if (!interaction.isChatInputCommand() && !interaction.isButton()) return;
 
-    if (interaction.isChatInputCommand() && interaction.commandName === 'criar-produto') {
-        // Verificar se é Admin ou o Dono do Servidor
-        const isAdmin = interaction.member.permissions.has('Administrator') || interaction.guild.ownerId === interaction.user.id;
-        if (!isAdmin) {
-            return interaction.reply({ content: '❌ Apenas administradores podem usar este comando.', ephemeral: true });
+        if (interaction.isChatInputCommand() && interaction.commandName === 'criar-produto') {
+            const isAdmin = interaction.member.permissions.has('Administrator') || interaction.guild.ownerId === interaction.user.id;
+            if (!isAdmin) {
+                return interaction.reply({ content: '❌ Apenas administradores podem usar este comando.', ephemeral: true });
+            }
+
+            const nome = interaction.options.getString('nome');
+            const preco = interaction.options.getNumber('preco');
+            const descricao = interaction.options.getString('descricao');
+
+            const embed = new EmbedBuilder()
+                .setTitle(`📦 ${nome}`)
+                .setDescription(descricao)
+                .setColor('#0099ff')
+                .addFields({ name: 'Preço', value: `R$ ${preco.toFixed(2)}` });
+
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`comprar_${Date.now()}`)
+                    .setLabel('Comprar Produto')
+                    .setStyle(ButtonStyle.Success)
+                    .setEmoji('🛒')
+            );
+
+            await interaction.reply({ embeds: [embed], components: [row] });
+            return;
         }
 
-        const nome = interaction.options.getString('nome');
-        const preco = interaction.options.getNumber('preco');
-        const descricao = interaction.options.getString('descricao');
+        if (interaction.isButton()) {
+            const customId = interaction.customId;
 
-        const embed = new EmbedBuilder()
-            .setTitle(`📦 ${nome}`)
-            .setDescription(descricao)
-            .setColor('#0099ff')
-            .addFields({ name: 'Preço', value: `R$ ${preco.toFixed(2)}` });
+            if (customId.startsWith('comprar_')) {
+                const guild = interaction.guild;
+                const user = interaction.user;
 
-        const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId(`comprar_${Date.now()}`)
-                .setLabel('Comprar Produto')
-                .setStyle(ButtonStyle.Success)
-                .setEmoji('🛒')
-        );
-
-        await interaction.reply({ embeds: [embed], components: [row] });
-        return;
-    }
-
-    if (interaction.isButton()) {
-        const customId = interaction.customId;
-
-        if (customId.startsWith('comprar_')) {
-            const guild = interaction.guild;
-            const user = interaction.user;
-
-            const channelName = `pedido-${user.username}`.toLowerCase().replace(/[^a-z0-9-]/g, '');
-            
-            try {
+                const channelName = `pedido-${user.username}`.toLowerCase().replace(/[^a-z0-9-]/g, '');
+                
                 const ticketChannel = await guild.channels.create({
                     name: channelName,
                     type: 0,
@@ -124,48 +128,50 @@ client.on('interactionCreate', async interaction => {
                 ]);
 
                 await interaction.reply({ content: `✅ Canal de atendimento criado com sucesso: ${ticketChannel}`, ephemeral: true });
-            } catch (error) {
-                console.error('Erro ao criar canal:', error);
-                await interaction.reply({ content: '❌ Ocorreu um erro ao criar o canal de atendimento.', ephemeral: true });
+                return;
             }
-            return;
-        }
 
-        if (customId.startsWith('confirm_yes_') || customId.startsWith('confirm_no_')) {
-            const isConfirm = customId.startsWith('confirm_yes_');
-            const targetUserId = customId.split('_')[2];
-            const newState = isConfirm ? 'aprovado' : 'cancelado';
+            if (customId.startsWith('confirm_yes_') || customId.startsWith('confirm_no_')) {
+                const isConfirm = customId.startsWith('confirm_yes_');
+                const targetUserId = customId.split('_')[2];
+                const newState = isConfirm ? 'aprovado' : 'cancelado';
 
-            await interaction.update({
-                content: `Pedido alterado para **${newState.toUpperCase()}**!`,
-                components: []
-            });
+                await interaction.update({
+                    content: `Pedido alterado para **${newState.toUpperCase()}**!`,
+                    components: []
+                });
 
-            const { data: order } = await supabase
-                .from('orders')
-                .select('*')
-                .eq('user_id', targetUserId)
-                .order('created_at', { ascending: false })
-                .limit(1)
-                .single();
+                const { data: order } = await supabase
+                    .from('orders')
+                    .select('*')
+                    .eq('user_id', targetUserId)
+                    .order('created_at', { ascending: false })
+                    .limit(1)
+                    .single();
 
-            if (order && order.channel_id) {
-                const ch = await interaction.guild.channels.fetch(order.channel_id).catch(() => null);
-                if (ch) {
-                    if (isConfirm) {
-                        await ch.send(`✅ **Pagamento Confirmado!** Obrigado pela compra.`);
-                        await ch.send(`🎁 **O teu produto/conteúdo:** \`COLOCA_O_TEU_LINK_OU_CHAVE_AQUI\``);
-                        
-                        await supabase
-                            .from('orders')
-                            .update({ status: 'entregue' })
-                            .eq('user_id', targetUserId)
-                            .eq('channel_id', order.channel_id);
-                    } else {
-                        await ch.send(`❌ **Pedido Recusado/Cancelado.**`);
+                if (order && order.channel_id) {
+                    const ch = await interaction.guild.channels.fetch(order.channel_id).catch(() => null);
+                    if (ch) {
+                        if (isConfirm) {
+                            await ch.send(`✅ **Pagamento Confirmado!** Obrigado pela compra.`);
+                            await ch.send(`🎁 **O teu produto/conteúdo:** \`COLOCA_O_TEU_LINK_OU_CHAVE_AQUI\``);
+                            
+                            await supabase
+                                .from('orders')
+                                .update({ status: 'entregue' })
+                                .eq('user_id', targetUserId)
+                                .eq('channel_id', order.channel_id);
+                        } else {
+                            await ch.send(`❌ **Pedido Recusado/Cancelado.**`);
+                        }
                     }
                 }
             }
+        }
+    } catch (error) {
+        console.error('Erro detalhado na interação:', error);
+        if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
+            await interaction.reply({ content: '❌ Ocorreu um erro ao processar esta ação.', ephemeral: true }).catch(() => {});
         }
     }
 });
