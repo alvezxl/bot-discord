@@ -279,11 +279,6 @@ client.on('interactionCreate', async interaction => {
 
     return interaction.reply({ content: `✅ Produto **${nome}** (R$ ${Number(preco).toFixed(2)}) cadastrado com sucesso!`, ephemeral: true });
   }
-
-  // Manipulação de Ações dos Pedidos (/pedidos)
-  if (interaction.isButton()) {
-    ...
-  // Manipulação de Ações dos Pedidos (/pedidos)
   if (interaction.isButton()) {
     const { customId } = interaction;
 
