@@ -256,9 +256,6 @@ client.on('interactionCreate', async interaction => {
 
         await interaction.followUp({ embeds: [orderEmbed], components: [row], ephemeral: true });
       }
-    }
-  }
-}
   } // <-- Fim do comando /pedidos
 
   // COLA AQUI NA LINHA 261:
