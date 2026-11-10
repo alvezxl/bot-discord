@@ -309,10 +309,7 @@ client.on('interactionCreate', async interaction => {
           }
         }
       }
-    }
-  }
 });
-
 client.login(process.env.DISCORD_TOKEN);
 // Cole o servidor HTTP aqui no finalzinho:
 const http = require('http');
