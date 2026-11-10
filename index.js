@@ -78,7 +78,22 @@ const commands = [
     .setDescription('Exibe o catálogo de produtos disponíveis para compra.'),
   new SlashCommandBuilder()
     .setName('pedidos')
-    .setDescription('Gerencia e lista os pedidos efetuados (Apenas para Creators).')
+    .setDescription('Gerencia e lista os pedidos efetuados (Apenas para Creators).'),
+  new SlashCommandBuilder()
+    .setName('criar-produto')
+    .setDescription('Cadastra um novo produto na loja (Apenas Administradores)')
+    .addStringOption(option => 
+      option.setName('nome')
+        .setDescription('Nome do produto')
+        .setRequired(true))
+    .addNumberOption(option => 
+      option.setName('preco')
+        .setDescription('Preço do produto (ex: 15.50)')
+        .setRequired(true))
+    .addStringOption(option => 
+      option.setName('descricao')
+        .setDescription('Descrição do produto')
+        .setRequired(false))
 ].map(cmd => cmd.toJSON());
 
 async function registerCommands() {
@@ -243,7 +258,34 @@ client.on('interactionCreate', async interaction => {
       }
     }
   }
+}
+  } // <-- Fim do comando /pedidos
 
+  // COLA AQUI NA LINHA 261:
+  if (commandName === 'criar-produto') {
+    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+      return interaction.reply({ content: '❌ Apenas administradores podem cadastrar produtos.', ephemeral: true });
+    }
+
+    const nome = interaction.options.getString('nome');
+    const preco = interaction.options.getNumber('preco');
+    const descricao = interaction.options.getString('descricao') || 'Sem descrição';
+
+    const { error } = await supabase
+      .from('products')
+      .insert([{ name: nome, price: preco, description: descricao }]);
+
+    if (error) {
+      console.error(error);
+      return interaction.reply({ content: '❌ Erro ao cadastrar o produto no banco de dados.', ephemeral: true });
+    }
+
+    return interaction.reply({ content: `✅ Produto **${nome}** (R$ ${Number(preco).toFixed(2)}) cadastrado com sucesso!`, ephemeral: true });
+  }
+
+  // Manipulação de Ações dos Pedidos (/pedidos)
+  if (interaction.isButton()) {
+    ...
   // Manipulação de Ações dos Pedidos (/pedidos)
   if (interaction.isButton()) {
     const { customId } = interaction;
